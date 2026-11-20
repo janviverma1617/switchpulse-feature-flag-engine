@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Live Client Storefront - SwitchPulse</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body.dark-theme {
+            background-color: #121212 !important;
+            color: #f1f1f1 !important;
+        }
+        body.dark-theme .card {
+            background-color: #1e1e1e;
+            color: #f1f1f1;
+            border-color: #333;
+        }
+        body.dark-theme .form-control, body.dark-theme .form-select {
+            background-color: #2b2b2b;
+            color: #fff;
+            border-color: #444;
+        }
+    </style>
+</head>
+<body class="bg-light" id="appBody">
+
+<nav class="navbar navbar-dark bg-primary px-4">
+    <span class="navbar-brand fw-bold">ShopDemo Client App (Simulated Consumer)</span>
+    <span class="badge bg-light text-primary">Powered by SwitchPulse API</span>
+</nav>
+
+<div class="container my-4">
+
+    <!-- Simulated User Context Bar -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-bold">Simulated End-User Context</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Tenant API Key</label>
+                    <input type="text" id="apiKeyInput" class="form-control" th:value="${apiKey}" placeholder="Paste ff_live_... key">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Simulated User ID</label>
+                    <input type="text" id="userIdInput" class="form-control" value="user_101">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Subscription Plan</label>
+                    <select id="planInput" class="form-select">
+                        <option value="FREE">FREE Tier</option>
+                        <option value="PRO">PRO Tier</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" onclick="evaluateAllFlags()">Evaluate Flags</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature 2: VIP Banner (Controlled by 'vip_banner' flag) -->
+    <div id="vipBanner" class="alert alert-warning fw-bold text-center shadow-sm d-none">
+        🌟 VIP PRO MEMBER OFFER: Enjoy 25% OFF on all orders today with code PRO25!
+    </div>
+
+    <!-- Simulated Storefront Product Card -->
+    <div class="row g-4">
+        <div class="col-md-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h4 class="mb-0">Enterprise Cloud Headphones</h4>
+                        <span id="themeBadge" class="badge bg-secondary">Light Mode Active</span>
+                    </div>
+                    <p class="text-muted">Noise-cancelling wireless headset for remote engineering teams.</p>
+                    <h3 class="my-3">$199.00</h3>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button class="btn btn-outline-secondary" onclick="trackPurchase('Standard Checkout')">
+                            Standard Cart Checkout
+                        </button>
+                        <!-- Feature 3: Express Checkout (Controlled by 'express_checkout' flag) -->
+                        <button id="expressCheckoutBtn" class="btn btn-success fw-bold d-none" onclick="trackPurchase('1-Click Express Checkout')">
+                            ⚡ 1-Click Express Checkout
+                        </button>
+                    </div>
+                    <div id="purchaseAlert" class="alert alert-success mt-3 d-none mb-0 small"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live API Evaluation Debug Output -->
+        <div class="col-md-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header fw-bold">Live API Evaluation Responses</div>
+                <div class="card-body">
+                    <pre id="debugOutput" class="bg-dark text-success p-3 rounded small mb-0" style="min-height: 210px;">Click "Evaluate Flags" to query /switchpulse/api/evaluate...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script th:inline="javascript">
+    // Automatically resolves to "/switchpulse/" or "/" depending on application.properties
+    const BASE_PATH = /*[[@{/}]]*/ '/';
+
+    let flagStates = {
+        dark_mode: false,
+        vip_banner: false,
+        express_checkout: false
+    };
+
+    async function checkFlag(apiKey, flagKey, userId, plan) {
+        const url = `${BASE_PATH}api/evaluate?apiKey=${encodeURIComponent(apiKey)}&flag=${encodeURIComponent(flagKey)}&userId=${encodeURIComponent(userId)}&plan=${encodeURIComponent(plan)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status} calling ${url}`);
+        }
+        return await res.json();
+    }
+
+    async function evaluateAllFlags() {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const userId = document.getElementById('userIdInput').value.trim();
+        const plan = document.getElementById('planInput').value;
+        const debugBox = document.getElementById('debugOutput');
+
+        if (!apiKey) {
+            alert("Please enter your Tenant API Key first!");
+            return;
+        }
+
+        try {
+            const [darkMode, vipBanner, expressCheckout] = await Promise.all([
+                checkFlag(apiKey, 'dark_mode', userId, plan),
+                checkFlag(apiKey, 'vip_banner', userId, plan),
+                checkFlag(apiKey, 'express_checkout', userId, plan)
+            ]);
+
+            flagStates = {
+                dark_mode: darkMode.enabled,
+                vip_banner: vipBanner.enabled,
+                express_checkout: expressCheckout.enabled
+            };
+
+            // 1. Apply Dark Mode
+            const body = document.getElementById('appBody');
+            const themeBadge = document.getElementById('themeBadge');
+            if (darkMode.enabled) {
+                body.classList.add('dark-theme');
+                themeBadge.className = 'badge bg-info text-dark';
+                themeBadge.innerText = 'Dark Mode Active';
+            } else {
+                body.classList.remove('dark-theme');
+                themeBadge.className = 'badge bg-secondary';
+                themeBadge.innerText = 'Light Mode Active';
+            }
+
+            // 2. Apply VIP Banner
+            document.getElementById('vipBanner').classList.toggle('d-none', !vipBanner.enabled);
+
+            // 3. Apply Express Checkout
+            document.getElementById('expressCheckoutBtn').classList.toggle('d-none', !expressCheckout.enabled);
+
+            document.getElementById('purchaseAlert').classList.add('d-none');
+
+            debugBox.innerText = JSON.stringify(
+                { dark_mode: darkMode, vip_banner: vipBanner, express_checkout: expressCheckout },
+                null,
+                2
+            );
+        } catch (err) {
+            debugBox.innerText = "Error: " + err.message;
+        }
+    }
+
+    async function trackPurchase(method) {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const flagsToTrack = Object.keys(flagStates);
+
+        await Promise.all(
+            flagsToTrack.map(flagKey => {
+                const url = `${BASE_PATH}api/track-conversion?apiKey=${encodeURIComponent(apiKey)}&flag=${encodeURIComponent(flagKey)}&enabled=${flagStates[flagKey]}`;
+                return fetch(url, { method: 'POST' });
+            })
+        );
+
+        const summary = flagsToTrack
+            .map(k => `${k}: ${flagStates[k] ? 'ON' : 'OFF'}`)
+            .join(' | ');
+
+        const alertBox = document.getElementById('purchaseAlert');
+        alertBox.classList.remove('d-none');
+        alertBox.innerText = `Order placed via ${method}! Recorded conversions for [${summary}].`;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('apiKeyInput').value.trim() !== '') {
+            evaluateAllFlags();
+        }
+    });
+</script>
+</body>
+</html>
